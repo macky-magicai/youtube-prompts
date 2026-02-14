@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 分割・統合ツール</title>
+    
+    <!-- 外部ライブラリ読み込み -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #1a237e 0%, #4a148c 40%, #c2185b 100%);
+            --primary-color: #1a237e;
+            --accent-color: #4a148c;
+            --highlight-color: #c2185b;
+            --text-color: #333;
+            --light-bg: #f8f9fa;
+            --border-color: #e0e0e0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            padding: 40px 20px;
+            line-height: 1.6;
+            color: var(--text-color);
+        }
+
+        .container {
+            background: white;
+            max-width: 800px;
+            margin: 0 auto;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+            text-align: center;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        /* Steps */
+        .step-section {
+            margin-bottom: 30px;
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .step-badge {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, #1a237e, #4a148c);
+            color: white;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+
+        .step-title {
+            font-weight: 700;
+            font-size: 18px;
+            color: var(--primary-color);
+        }
+
+        /* Inputs Area */
+        .input-group {
+            background: var(--light-bg);
+            border-radius: 12px;
+            border: 2px solid var(--border-color);
+            padding: 20px;
+        }
+
+        /* Step 1: File Selection */
+        .file-select-btn {
+            display: inline-block;
+            background: linear-gradient(to right, #1a237e, #4a148c);
+            color: white;
+            border-radius: 8px;
+            padding: 15px 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-align: center;
+        }
+        .file-select-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(26, 35, 126, 0.3);
+        }
+        .file-info {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            border-radius: 4px;
+            font-weight: 600;
+            display: none; /* hidden by default */
+        }
+        .file-info.visible {
+            display: block;
+        }
+
+        /* Step 2: Page Range */
+        .range-helper {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        input[type="number"], input[type="text"] {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        input[type="number"] {
+            width: 80px;
+        }
+        input[type="text"] {
+            width: 100%;
+            margin-top: 10px;
+        }
+        button.add-btn {
+            background: #4a148c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        button.add-btn:hover {
+            background: #6a1b9a;
+        }
+
+        /* Step 3 & 4: Radio Cards */
+        .radio-options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .radio-card {
+            padding: 16px;
+            background: white;
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .radio-card:hover {
+            border-color: var(--accent-color);
+        }
+        .radio-card.selected {
+            border-color: var(--accent-color);
+            background: #f3e5f5;
+        }
+        .radio-card input[type="radio"] {
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        .radio-title {
+            font-weight: 600;
+            font-size: 15px;
+        }
+        .radio-desc {
+            display: block;
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+            margin-left: 24px;
+        }
+
+        /* Previews */
+        .mode-preview {
+            margin-top: 15px;
+            padding: 15px;
+            background: #fff9e6;
+            border-left: 4px solid #ffa726;
+            border-radius: 4px;
+            font-size: 14px;
+            display: none;
+        }
+        .mode-preview.visible {
+            display: block;
+        }
+
+        /* Execute Button */
+        #executeBtn {
+            width: 100%;
+            padding: 18px;
+            border-radius: 12px;
+            border: none;
+            background: linear-gradient(to right, #1a237e, #c2185b);
+            color: white;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 20px;
+        }
+        #executeBtn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(194, 24, 91, 0.3);
+        }
+        #executeBtn:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+        #executeBtn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Status Area */
+        .status-area {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 15px;
+            display: none;
+            animation: fadeIn 0.3s ease-in-out;
+            white-space: pre-wrap; /* 改行を反映 */
+        }
+        .status-area.visible {
+            display: block;
+        }
+        .status-area.success {
+            background: #e8f5e9;
+            border: 2px solid #4caf50;
+            color: #2e7d32;
+        }
+        .status-area.error {
+            background: #ffebee;
+            border: 2px solid #f44336;
+            color: #c62828;
+        }
+        .status-area.processing {
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+            color: #1565c0;
+        }
+        .status-area.warning {
+            background: #fff3e0;
+            border: 2px solid #ff9800;
+            color: #e65100;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            .range-helper {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            input[type="number"] {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>PDF 分割・統合ツール</h1>
+    <div class="subtitle">完全ローカル処理。サーバーには送信されません。</div>
+
+    <!-- Step 1: File Selection -->
+    <div class="step-section">
+        <div class="step-header">
+            <span class="step-badge">1</span>
+            <span class="step-title">ファイル選択</span>
+        </div>
+        <div class="input-group">
+            <input type="file" id="pdfInput" accept=".pdf" style="display: none;">
+            <label for="pdfInput" class="file-select-btn">PDFファイルを選択</label>
+            <div id="fileInfo" class="file-info"></div>
+        </div>
+    </div>
+
+    <!-- Step 2: Page Range -->
+    <div class="step-section">
+        <div class="step-header">
+            <span class="step-badge">2</span>
+            <span class="step-title">ページ範囲指定</span>
+        </div>
+        <div class="input-group">
+            <div class="range-helper">
+                <input type="number" id="rangeStart" placeholder="開始" min="1">
+                <span>～</span>
+                <input type="number" id="rangeEnd" placeholder="終了" min="1">
+                <button id="addRangeBtn" class="add-btn">追加</button>
+            </div>
+            <input type="text" id="pageRangeInput" placeholder="例: 1-3, 5, 7-9">
+            <div style="font-size: 12px; color: #666; margin-top: 5px;">※空欄の場合は全ページが対象になります</div>
+        </div>
+    </div>
+
+    <!-- Step 3: Output Mode -->
+    <div class="step-section">
+        <div class="step-header">
+            <span class="step-badge">3</span>
+            <span class="step-title">出力モード選択</span>
+        </div>
+        <div class="radio-options">
+            <label class="radio-card selected">
+                <input type="radio" name="outputMode" value="merge" checked>
+                <span class="radio-title">まとめて1ファイルに結合</span>
+                <span class="radio-desc">すべてのページを1つのファイルにまとめます</span>
+            </label>
+            <label class="radio-card">
+                <input type="radio" name="outputMode" value="split">
+                <span class="radio-title">グループごとに別ファイルで出力（ZIP）</span>
+                <span class="radio-desc">カンマ区切りの各グループを独立したファイルとして出力（ZIPでまとめてダウンロード）</span>
+            </label>
+            <label class="radio-card">
+                <input type="radio" name="outputMode" value="split-nozip">
+                <span class="radio-title">グループごとに別ファイルで出力（ZIPなし）</span>
+                <span class="radio-desc">各ファイルを0.8秒間隔で個別ダウンロード（セキュリティソフトでZIPがブロックされる場合）</span>
+            </label>
+        </div>
+        <div id="modePreview" class="mode-preview"></div>
+    </div>
+
+    <!-- Step 4: Output Format -->
+    <div class="step-section">
+        <div class="step-header">
+            <span class="step-badge">4</span>
+            <span class="step-title">出力形式選択</span>
+        </div>
+        <div class="radio-options">
+            <label class="radio-card selected">
+                <input type="radio" name="outputFormat" value="pdf" checked>
+                <span class="radio-title">PDFファイル (.pdf)</span>
+            </label>
+            <label class="radio-card">
+                <input type="radio" name="outputFormat" value="image-zip">
+                <span class="radio-title">画像: まとめてZIPで保存 (.zip)</span>
+                <span class="radio-desc">ページごとにJPEG画像に変換して圧縮します</span>
+            </label>
+            <label class="radio-card">
+                <input type="radio" name="outputFormat" value="image-single">
+                <span class="radio-title">画像: 1枚ずつ保存 (.jpg)</span>
+                <span class="radio-desc">ZIPを使わず1枚ずつダウンロードします</span>
+            </label>
+        </div>
+    </div>
+
+    <button id="executeBtn" disabled>ファイルの分割・ダウンロード</button>
+
+    <div id="statusArea" class="status-area"></div>
+</div>
+
+<script>
+    // --- グローバル変数 ---
+    let pdfData = null;       // ArrayBuffer
+    let totalPages = 0;       // 総ページ数
+    let fileName = '';        // 拡張子なしファイル名
+
+    // --- DOM要素 ---
+    const pdfInput = document.getElementById('pdfInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const rangeStart = document.getElementById('rangeStart');
+    const rangeEnd = document.getElementById('rangeEnd');
+    const addRangeBtn = document.getElementById('addRangeBtn');
+    const pageRangeInput = document.getElementById('pageRangeInput');
+    const modePreview = document.getElementById('modePreview');
+    const executeBtn = document.getElementById('executeBtn');
+    const statusArea = document.getElementById('statusArea');
+
+    // --- 初期設定 (PDF.js Worker) ---
+    // 必ずバージョンを一致させる
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    // --- UI操作: ラジオボタンのカード選択 ---
+    document.querySelectorAll('.radio-card').forEach(card => {
+        card.addEventListener('click', function(e) {
+            // クリック対象がinput自身ならバブリングで処理されるので何もしない（重複防止）
+            if (e.target.tagName === 'INPUT') return;
+
+            const radio = this.querySelector('input[type="radio"]');
+            radio.checked = true;
+            // イベント発火してchangeイベントを拾わせる
+            radio.dispatchEvent(new Event('change'));
+            updateRadioStyles(radio.name);
+        });
+    });
+
+    // changeイベントでスタイル更新とプレビュー更新をフック
+    document.querySelectorAll('input[type="radio"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            updateRadioStyles(radio.name);
+            if (radio.name === 'outputMode') updateModePreview();
+        });
+    });
+
+    function updateRadioStyles(groupName) {
+        document.querySelectorAll(`input[name="${groupName}"]`).forEach(r => {
+            const card = r.closest('.radio-card');
+            if (r.checked) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+        });
+    }
+
+    // --- ステップ1: ファイル読み込み ---
+    pdfInput.addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.type !== 'application/pdf') {
+            showStatus('エラー: PDFファイルを選択してください。', 'error');
+            return;
+        }
+
+        try {
+            showStatus('ファイルを読み込み中...', 'processing');
+            const arrayBuffer = await file.arrayBuffer();
+            
+            // pdf-libでロードしてページ数確認
+            const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+            
+            pdfData = arrayBuffer;
+            totalPages = pdfDoc.getPageCount();
+            fileName = file.name.replace(/\.pdf$/i, '');
+
+            // UI更新
+            fileInfo.innerHTML = `<strong>${file.name}</strong> (全${totalPages}ページ)`;
+            fileInfo.classList.add('visible');
+            
+            // 入力欄の最大値を設定
+            rangeStart.max = totalPages;
+            rangeEnd.max = totalPages;
+            
+            executeBtn.disabled = false;
+            statusArea.className = 'status-area'; // 非表示に戻す
+            statusArea.style.display = 'none';
+
+            // プレビュー更新
+            updateModePreview();
+
+        } catch (err) {
+            console.error(err);
+            showStatus('PDFの読み込みに失敗しました。パスワード保護されているか、壊れている可能性があります。', 'error');
+            executeBtn.disabled = true;
+        }
+    });
+
+    // --- ステップ2: 入力補助 & 自動変換 ---
+    
+    // 全角→半角変換
+    pageRangeInput.addEventListener('input', function(e) {
+        let val = this.value;
+        // 数字
+        val = val.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+        // ハイフン系
+        val = val.replace(/[ー－—]/g, '-');
+        // カンマ系
+        val = val.replace(/[，、]/g, ',');
+        
+        if (val !== this.value) {
+            this.value = val;
+        }
+        updateModePreview();
+    });
+
+    // 追加ボタン
+    addRangeBtn.addEventListener('click', function() {
+        const start = rangeStart.value;
+        const end = rangeEnd.value;
+        
+        if (!start) return; // 開始なしは無視
+
+        let newEntry = '';
+        if (end && parseInt(end) >= parseInt(start)) {
+            newEntry = `${start}-${end}`;
+        } else {
+            newEntry = `${start}`;
+        }
+
+        const currentVal = pageRangeInput.value.trim();
+        if (currentVal) {
+            pageRangeInput.value = currentVal + ', ' + newEntry;
+        } else {
+            pageRangeInput.value = newEntry;
+        }
+
+        // クリア
+        rangeStart.value = '';
+        rangeEnd.value = '';
+        updateModePreview();
+    });
+
+    // --- モードプレビュー更新ロジック ---
+    function updateModePreview() {
+        if (!pdfData) return;
+        
+        const inputStr = pageRangeInput.value.trim();
+        const mode = document.querySelector('input[name="outputMode"]:checked').value;
+        const previewEl = modePreview;
+
+        if (!inputStr) {
+            previewEl.classList.remove('visible');
+            return;
+        }
+
+        previewEl.classList.add('visible');
+        
+        // 簡易パースして例を表示
+        const groups = parsePageGroups(inputStr, totalPages);
+        const count = groups.length;
+        
+        let html = `<strong>処理プレビュー:</strong><br>`;
+        
+        if (mode === 'merge') {
+            // マージモード: 全ページ数を計算
+            const totalSelected = groups.flat().length;
+            html += `指定された全 <strong>${totalSelected}</strong> ページを 1つのファイルに結合します。<br>`;
+            html += `<span style="color:#666; font-size:0.9em;">(例: report_split.pdf)</span>`;
+        } else {
+            // 分割モード
+            html += `指定に基づき <strong>${count}</strong> つのファイルを作成します。<br>`;
+            if (count > 0) {
+                const ex1 = groups[0].map(p => p+1); // 1-based
+                let exStr = ex1.length > 1 ? `${ex1[0]}...${ex1[ex1.length-1]}` : `${ex1[0]}`;
+                html += `<span style="color:#666; font-size:0.9em;">ファイル1: ページ ${exStr} を含む<br>`;
+                if (count > 1) html += `... 他 ${count-1} ファイル</span>`;
+                else html += `</span>`;
+            }
+        }
+        previewEl.innerHTML = html;
+    }
+
+    // --- 実行ボタン ---
+    executeBtn.addEventListener('click', async function() {
+        if (!pdfData) return;
+
+        const outputMode = document.querySelector('input[name="outputMode"]:checked').value;
+        const outputFormat = document.querySelector('input[name="outputFormat"]:checked').value;
+        const rangeStr = pageRangeInput.value.trim();
+
+        // ページ範囲が空の場合は全ページとする
+        const rangeToUse = rangeStr || `1-${totalPages}`;
+
+        // UIロック
+        executeBtn.disabled = true;
+        
+        try {
+            showStatus('処理を開始します...', 'processing');
+            
+            // 少し遅延させてUI描画を確保
+            await new Promise(r => setTimeout(r, 100));
+
+            if (outputFormat === 'pdf') {
+                if (outputMode === 'merge') {
+                    await generateMergedPDF(rangeToUse);
+                } else if (outputMode === 'split') {
+                    await generateSplitPDFs(rangeToUse, true); // ZIPあり
+                } else {
+                    await generateSplitPDFs(rangeToUse, false); // ZIPなし
+                }
+            } else {
+                // 画像出力
+                if (outputFormat === 'image-zip') {
+                    await generateImagesZIP(rangeToUse, outputMode);
+                } else {
+                    await generateImagesSingle(rangeToUse, outputMode);
+                }
+            }
+
+        } catch (err) {
+            console.error(err);
+            showStatus('処理中にエラーが発生しました: ' + err.message, 'error');
+        } finally {
+            executeBtn.disabled = false;
+        }
+    });
+
+    // --- ロジック関数群 ---
+
+    // 0-basedのページインデックス配列の配列を返す [[0,1,2], [5]]
+    function parsePageGroups(input, maxPages) {
+        const groups = [];
+        const parts = input.split(',');
+        
+        parts.forEach(part => {
+            const range = part.trim();
+            if (!range) return;
+            
+            const indexes = new Set();
+            
+            if (range.includes('-')) {
+                const [s, e] = range.split('-').map(str => parseInt(str.trim()));
+                if (!isNaN(s) && !isNaN(e)) {
+                    const start = Math.max(1, Math.min(s, maxPages));
+                    const end = Math.max(1, Math.min(e, maxPages));
+                    const min = Math.min(start, end);
+                    const max = Math.max(start, end);
+                    for (let i = min; i <= max; i++) indexes.add(i - 1);
+                }
+            } else {
+                const p = parseInt(range);
+                if (!isNaN(p) && p >= 1 && p <= maxPages) {
+                    indexes.add(p - 1);
+                }
+            }
+            
+            if (indexes.size > 0) {
+                // ソートして配列化
+                groups.push(Array.from(indexes).sort((a,b) => a-b));
+            }
+        });
+        
+        return groups;
+    }
+
+    // 結合用にフラットなページ配列を作成
+    function parsePageRangeFlat(input, maxPages) {
+        const groups = parsePageGroups(input, maxPages);
+        // 全てを1つの配列に
+        const allIndexes = [];
+        groups.forEach(g => {
+            g.forEach(idx => allIndexes.push(idx));
+        });
+        return allIndexes;
+    }
+
+    // --- PDF出力ロジック ---
+
+    async function generateMergedPDF(rangeStr) {
+        const indexes = parsePageRangeFlat(rangeStr, totalPages);
+        if (indexes.length === 0) throw new Error('有効なページ範囲がありません');
+
+        const srcDoc = await PDFLib.PDFDocument.load(pdfData);
+        const newDoc = await PDFLib.PDFDocument.create();
+
+        // メタデータ設定
+        newDoc.setTitle(fileName);
+        newDoc.setProducer('PDF Split Tool');
+        newDoc.setCreator('Local PDF Tool');
+        const now = new Date();
+        newDoc.setCreationDate(now);
+        newDoc.setModificationDate(now);
+
+        const copiedPages = await newDoc.copyPages(srcDoc, indexes);
+        copiedPages.forEach(page => newDoc.addPage(page));
+
+        const pdfBytes = await newDoc.save();
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        saveAs(blob, `${fileName}_merged.pdf`);
+        
+        showStatus('PDFの結合とダウンロードが完了しました！', 'success');
+    }
+
+    async function generateSplitPDFs(rangeStr, useZip) {
+        const groups = parsePageGroups(rangeStr, totalPages);
+        if (groups.length === 0) throw new Error('有効なページ範囲がありません');
+
+        const srcDoc = await PDFLib.PDFDocument.load(pdfData);
+        const zip = useZip ? new JSZip() : null;
+
+        let count = 0;
+        for (const group of groups) {
+            count++;
+            const newDoc = await PDFLib.PDFDocument.create();
+            newDoc.setProducer('PDF Split Tool');
+            newDoc.setCreator('Local PDF Tool');
+            newDoc.setCreationDate(new Date());
+            newDoc.setModificationDate(new Date());
+
+            const copiedPages = await newDoc.copyPages(srcDoc, group);
+            copiedPages.forEach(page => newDoc.addPage(page));
+
+            const pdfBytes = await newDoc.save();
+            
+            // ファイル名生成 (例: name_p1-3.pdf)
+            const pStart = group[0] + 1;
+            const pEnd = group[group.length - 1] + 1;
+            const nameSuffix = (pStart === pEnd) ? `p${pStart}` : `p${pStart}-${pEnd}`;
+            const outName = `${fileName}_${nameSuffix}.pdf`;
+
+            if (useZip) {
+                zip.file(outName, pdfBytes);
+            } else {
+                // ZIPなし: 個別ダウンロード
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                saveAs(blob, outName);
+                showStatus(`ダウンロード中... (${count}/${groups.length})`, 'processing');
+                // ブラウザのダウンロード制限回避のための遅延
+                if (count < groups.length) await new Promise(r => setTimeout(r, 800));
+            }
+        }
+
+        if (useZip) {
+            showStatus('ZIPファイルを作成中...', 'processing');
+            const content = await zip.generateAsync({ type: "blob" });
+            saveAs(content, `${fileName}_split.zip`);
+            showStatus('ZIPファイルのダウンロードが完了しました！', 'success');
+        } else {
+            showSuccessWithBlockMsg();
+        }
+    }
+
+    // --- 画像出力ロジック ---
+
+    // PDF.jsドキュメントを取得するヘルパー (detach対策のため1回だけ呼ぶ)
+    async function getPdfJsDoc() {
+        // PDF.js 3.xではdataに渡したバッファはtransferされるため、コピーを渡す
+        const dataCopy = new Uint8Array(pdfData); 
+        return await pdfjsLib.getDocument({ data: dataCopy }).promise;
+    }
+
+    // ページを画像Blobに変換
+    async function renderPageToBlob(pdfJsDoc, pageIndex) {
+        const page = await pdfJsDoc.getPage(pageIndex + 1); // 1-based
+        const viewport = page.getViewport({ scale: 2.0 }); // 高画質用
+        
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({
+            canvasContext: context,
+            viewport: viewport
+        }).promise;
+
+        return new Promise(resolve => {
+            canvas.toBlob(blob => {
+                resolve(blob);
+            }, 'image/jpeg', 0.9);
+        });
+    }
+
+    async function generateImagesZIP(rangeStr, mode) {
+        // グループ分け
+        let groups = [];
+        if (mode === 'merge') {
+            // mergeモードなら1つのグループとして扱う（フラット化）
+            const flat = parsePageRangeFlat(rangeStr, totalPages);
+            if (flat.length > 0) groups.push(flat);
+        } else {
+            // splitモードならグループ分け維持
+            groups = parsePageGroups(rangeStr, totalPages);
+        }
+
+        if (groups.length === 0) throw new Error('有効なページ範囲がありません');
+
+        const pdfJsDoc = await getPdfJsDoc();
+        const zip = new JSZip();
+        let totalProcessed = 0;
+        const totalCount = groups.reduce((sum, g) => sum + g.length, 0);
+
+        // ZIP構造作成
+        // mode=merge -> rootに画像列挙
+        // mode=split -> フォルダ分け: range_p1-3/p001.jpg
+        
+        for (const group of groups) {
+            // フォルダ名決定 (splitモード時のみ)
+            let folder = zip;
+            if (mode !== 'merge') {
+                const pStart = group[0] + 1;
+                const pEnd = group[group.length - 1] + 1;
+                const folderName = `${fileName}_p${pStart}-${pEnd}`;
+                folder = zip.folder(folderName);
+            }
+
+            for (const pageIdx of group) {
+                const blob = await renderPageToBlob(pdfJsDoc, pageIdx);
+                const pageNumStr = String(pageIdx + 1).padStart(3, '0');
+                folder.file(`${fileName}_page_${pageNumStr}.jpg`, blob);
+                
+                totalProcessed++;
+                showStatus(`画像変換中... (${totalProcessed}/${totalCount})`, 'processing');
+            }
+        }
+
+        showStatus('ZIPファイルを作成中...', 'processing');
+        const content = await zip.generateAsync({ type: "blob" });
+        saveAs(content, `${fileName}_images.zip`);
+        showStatus('画像のZIPダウンロードが完了しました！', 'success');
+    }
+
+    async function generateImagesSingle(rangeStr, mode) {
+        // 個別ダウンロードモード
+        // modeに関わらず、指定された全ページをフラットに順次ダウンロード
+        const allPages = parsePageRangeFlat(rangeStr, totalPages);
+        if (allPages.length === 0) throw new Error('有効なページ範囲がありません');
+
+        const pdfJsDoc = await getPdfJsDoc();
+
+        for (let i = 0; i < allPages.length; i++) {
+            const pageIdx = allPages[i];
+            const blob = await renderPageToBlob(pdfJsDoc, pageIdx);
+            
+            const pageNumStr = String(pageIdx + 1).padStart(3, '0');
+            const outName = `${fileName}_page_${pageNumStr}.jpg`;
+            
+            saveAs(blob, outName);
+            
+            showStatus(`ダウンロード中... (${i+1}/${allPages.length})`, 'processing');
+            
+            if (i < allPages.length - 1) {
+                await new Promise(r => setTimeout(r, 800));
+            }
+        }
+        
+        showSuccessWithBlockMsg();
+    }
+
+    // --- ステータス表示 ---
+    function showStatus(msg, type) {
+        statusArea.innerHTML = msg;
+        statusArea.className = `status-area visible ${type}`;
+    }
+
+    function showSuccessWithBlockMsg() {
+        const msg = `ダウンロードが完了しました！
+        
+■ ダウンロードが開始されない場合
+連続ダウンロードがブラウザによってブロックされている可能性があります。
+アドレスバーの右端に表示される「ポップアップブロック」または「複数ファイルのダウンロード」アイコンをクリックし、「許可」を選択してください。`;
+        showStatus(msg, 'success');
+    }
+
+</script>
+</body>
+</html>
